@@ -305,11 +305,8 @@ show_join_info() {
         echo "🎉 生成子节点加入命令..."
         echo "================================"
         
-        # 获取主节点IP
-        MASTER_IP=$(curl -s --connect-timeout 5 ifconfig.me 2>/dev/null || \
-                   ip route get 1.1.1.1 | awk '{print $7}' | head -1 2>/dev/null || \
-                   hostname -I | awk '{print $1}' 2>/dev/null || \
-                   echo "localhost")
+        # 获取主节点IP - 更智能的检测逻辑
+        MASTER_IP=$(get_master_ip_auto)
         
         # 生成节点名称
         NODE_NAME="node-$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 8 | head -n 1)"
@@ -350,6 +347,41 @@ EOF
         
         log_success "加入命令已保存到 join-command.txt"
     fi
+}
+
+# 智能获取主节点IP
+get_master_ip_auto() {
+    local master_ip=""
+    
+    # 1. 首先尝试获取内网IP（更适合局域网部署）
+    if command -v ip &> /dev/null; then
+        # 获取默认路由的IP
+        master_ip=$(ip route get 1.1.1.1 | awk '{print $7}' | head -1 2>/dev/null || echo "")
+    fi
+    
+    # 2. 如果没有获取到，尝试其他方法
+    if [ -z "$master_ip" ] && command -v hostname &> /dev/null; then
+        master_ip=$(hostname -I | awk '{print $1}' 2>/dev/null || echo "")
+    fi
+    
+    # 3. 如果还是没有，尝试ifconfig
+    if [ -z "$master_ip" ] && command -v ifconfig &> /dev/null; then
+        master_ip=$(ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -1 2>/dev/null || echo "")
+    fi
+    
+    # 4. 如果还是没有，获取外网IP（用于公网部署）
+    if [ -z "$master_ip" ] && command -v curl &> /dev/null; then
+        master_ip=$(curl -s --connect-timeout 5 ifconfig.me 2>/dev/null || echo "")
+    fi
+    
+    # 5. 最后检查是否为有效的IP地址
+    if [ -z "$master_ip" ] || [ "$master_ip" = "localhost" ] || [ "$master_ip" = "127.0.0.1" ]; then
+        log_warning "无法自动检测到有效的IP地址，请手动指定"
+        log_info "使用方法: ./generate-join-command.sh --master-ip <你的IP地址>"
+        master_ip="<你的主节点IP>"
+    fi
+    
+    echo "$master_ip"
 }
 
 # 主函数
