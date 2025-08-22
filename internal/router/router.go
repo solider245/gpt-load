@@ -42,6 +42,7 @@ func NewRouter(
 	proxyServer *proxy.ProxyServer,
 	configManager types.ConfigManager,
 	groupManager *services.GroupManager,
+	configSyncHandler *handler.ConfigSyncHandler,
 	buildFS embed.FS,
 	indexPage []byte,
 ) *gin.Engine {
@@ -63,7 +64,7 @@ func NewRouter(
 
 	// 注册路由
 	registerSystemRoutes(router, serverHandler)
-	registerAPIRoutes(router, serverHandler, configManager)
+	registerAPIRoutes(router, serverHandler, configManager, configSyncHandler)
 	registerProxyRoutes(router, proxyServer, groupManager)
 	registerFrontendRoutes(router, buildFS, indexPage)
 
@@ -80,6 +81,7 @@ func registerAPIRoutes(
 	router *gin.Engine,
 	serverHandler *handler.Server,
 	configManager types.ConfigManager,
+	configSyncHandler *handler.ConfigSyncHandler,
 ) {
 	api := router.Group("/api")
 	authConfig := configManager.GetAuthConfig()
@@ -90,7 +92,7 @@ func registerAPIRoutes(
 	// 认证
 	protectedAPI := api.Group("")
 	protectedAPI.Use(middleware.Auth(authConfig))
-	registerProtectedAPIRoutes(protectedAPI, serverHandler)
+	registerProtectedAPIRoutes(protectedAPI, serverHandler, configSyncHandler)
 }
 
 // registerPublicAPIRoutes 公开API路由
@@ -99,7 +101,7 @@ func registerPublicAPIRoutes(api *gin.RouterGroup, serverHandler *handler.Server
 }
 
 // registerProtectedAPIRoutes 认证API路由
-func registerProtectedAPIRoutes(api *gin.RouterGroup, serverHandler *handler.Server) {
+func registerProtectedAPIRoutes(api *gin.RouterGroup, serverHandler *handler.Server, configSyncHandler *handler.ConfigSyncHandler) {
 	api.GET("/channel-types", serverHandler.CommonHandler.GetChannelTypes)
 
 	groups := api.Group("/groups")
@@ -152,6 +154,18 @@ func registerProtectedAPIRoutes(api *gin.RouterGroup, serverHandler *handler.Ser
 	{
 		settings.GET("", serverHandler.GetSettings)
 		settings.PUT("", serverHandler.UpdateSettings)
+	}
+
+	// 配置同步 (只有在启用时才会生效)
+	if configSyncHandler != nil {
+		config := api.Group("/config")
+		{
+			config.GET("", configSyncHandler.GetConfig)
+			config.PUT("", configSyncHandler.UpdateConfig)
+			config.GET("/status", configSyncHandler.GetSyncStatus)
+			config.POST("/sync", configSyncHandler.ForceSync)
+			config.PUT("/database", configSyncHandler.UpdateDatabaseConfig)
+		}
 	}
 }
 

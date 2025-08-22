@@ -37,6 +37,8 @@ type App struct {
 	storage           store.Store
 	db                *gorm.DB
 	httpServer        *http.Server
+	configSync        *config.ConfigSync
+	secureConfig      *config.SecureConfigManager
 }
 
 // AppParams defines the dependencies for the App.
@@ -57,6 +59,26 @@ type AppParams struct {
 
 // NewApp is the constructor for App, with dependencies injected by dig.
 func NewApp(params AppParams) *App {
+	// 初始化配置同步服务
+	var configSync *config.ConfigSync
+	var secureConfig *config.SecureConfigManager
+	
+	// 只有在配置了 Redis 时才启用配置同步
+	if params.ConfigManager.GetRedisDSN() != "" {
+		var err error
+		configSync, err = config.NewConfigSync(params.SettingsManager, params.Storage, "instance-1")
+		if err != nil {
+			logrus.WithError(err).Warn("Failed to create config sync service, running without config synchronization")
+		} else {
+			// 初始化安全配置管理器
+			baseManager := params.ConfigManager.(*config.Manager)
+			secureConfig, err = config.NewSecureConfigManager(baseManager, configSync)
+			if err != nil {
+				logrus.WithError(err).Warn("Failed to create secure config manager")
+			}
+		}
+	}
+	
 	return &App{
 		engine:            params.Engine,
 		configManager:     params.ConfigManager,
@@ -69,6 +91,8 @@ func NewApp(params AppParams) *App {
 		proxyServer:       params.ProxyServer,
 		storage:           params.Storage,
 		db:                params.DB,
+		configSync:        configSync,
+		secureConfig:      secureConfig,
 	}
 }
 
@@ -204,6 +228,11 @@ func (a *App) Stop(ctx context.Context) {
 
 	if a.storage != nil {
 		a.storage.Close()
+	}
+	
+	// 停止配置同步服务
+	if a.configSync != nil {
+		a.configSync.Stop()
 	}
 
 	logrus.Info("Server exited gracefully")

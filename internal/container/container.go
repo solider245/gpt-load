@@ -83,6 +83,9 @@ func BuildContainer() (*dig.Container, error) {
 	if err := container.Provide(handler.NewCommonHandler); err != nil {
 		return nil, err
 	}
+	if err := container.Provide(handler.NewConfigSyncHandler); err != nil {
+		return nil, err
+	}
 
 	// Proxy & Router
 	if err := container.Provide(proxy.NewProxyServer); err != nil {

@@ -71,6 +71,15 @@ type LoginResponse struct {
 	Message string `json:"message"`
 }
 
+// NewConfigSyncHandlerParams defines the dependencies for the NewConfigSyncHandler constructor.
+type NewConfigSyncHandlerParams struct {
+	dig.In
+	ConfigSync      *config.ConfigSync
+	SecureConfig    *config.SecureConfigManager
+	SettingsManager *config.SystemSettingsManager
+}
+
+
 // Login handles authentication verification
 func (s *Server) Login(c *gin.Context) {
 	var req LoginRequest

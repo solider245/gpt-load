@@ -1,0 +1,38 @@
+# GPT-Load 简化版集群配置
+version: '3.8'
+
+services:
+  # 主节点 - 单节点部署，包含所有功能
+  gpt-load-master:
+    build:
+      context: .
+      dockerfile: Dockerfile.simple
+    image: gpt-load:latest
+    container_name: gpt-load-master
+    ports:
+      - "3001:3001"  # 主服务端口
+    env_file:
+      - .env.master
+    environment:
+      - NODE_ROLE=master
+      - IS_SLAVE=false
+      - ENABLE_CLUSTER=false  # 简化版默认关闭集群
+    restart: always
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    healthcheck:
+      test: wget -q --spider -T 10 -O /dev/null http://localhost:3001/health
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - gpt-load-network
+
+# 简化版不包含 Redis 和 Nginx
+# 如需集群功能，可手动添加子节点
+
+networks:
+  gpt-load-network:
+    driver: bridge
