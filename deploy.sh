@@ -280,11 +280,75 @@ show_status() {
     # 子节点加入
     echo "🚀 子节点加入:"
     if [ -f .env.master ]; then
-        source .env.master
-        echo "  1. 分发镜像: docker save gpt-load:latest | docker load"
-        echo "  2. 加入集群: ./join-cluster.sh <主节点IP> [节点名称]"
-        echo "  3. 示例: ./join-cluster.sh 192.168.1.100 node-1"
+        if [ -f generate-join-command.sh ]; then
+            echo "  🎯 一键加入命令生成器:"
+            echo "     ./generate-join-command.sh"
+            echo ""
+            echo "  💡 或者手动加入:"
+            echo "     ./join-cluster.sh <主节点IP> [节点名称]"
+            echo "     示例: ./join-cluster.sh 192.168.1.100 node-1"
+            echo ""
+        else
+            source .env.master
+            echo "  1. 分发镜像: docker save gpt-load:latest | docker load"
+            echo "  2. 加入集群: ./join-cluster.sh <主节点IP> [节点名称]"
+            echo "  3. 示例: ./join-cluster.sh 192.168.1.100 node-1"
+            echo ""
+        fi
+    fi
+}
+
+# 显示子节点加入信息
+show_join_info() {
+    if [ -f generate-join-command.sh ] && [ -f .env.master ]; then
         echo ""
+        echo "🎉 生成子节点加入命令..."
+        echo "================================"
+        
+        # 获取主节点IP
+        MASTER_IP=$(curl -s --connect-timeout 5 ifconfig.me 2>/dev/null || \
+                   ip route get 1.1.1.1 | awk '{print $7}' | head -1 2>/dev/null || \
+                   hostname -I | awk '{print $1}' 2>/dev/null || \
+                   echo "localhost")
+        
+        # 生成节点名称
+        NODE_NAME="node-$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 8 | head -n 1)"
+        
+        # 生成加入命令
+        JOIN_COMMAND="curl -sSL https://raw.githubusercontent.com/solider245/gpt-load/main/join-cluster.sh | bash -s -- ${MASTER_IP} ${NODE_NAME}"
+        
+        echo "🚀 子节点加入命令:"
+        echo "================================"
+        echo ""
+        echo "${CYAN}${JOIN_COMMAND}${NC}"
+        echo ""
+        echo "💡 使用方法:"
+        echo "  1. 在子节点服务器上复制上面的命令"
+        echo "  2. 粘贴到终端并执行"
+        echo "  3. 等待自动安装和配置完成"
+        echo ""
+        echo "📋 节点信息:"
+        echo "  - 主节点IP: ${MASTER_IP}"
+        echo "  - 节点名称: ${NODE_NAME}"
+        echo "  - 端口: 3001"
+        echo ""
+        
+        # 保存到文件
+        cat > join-command.txt << EOF
+GPT-Load 子节点加入命令
+========================
+
+主节点IP: $MASTER_IP
+节点名称: $NODE_NAME
+端口: 3001
+
+加入命令:
+$JOIN_COMMAND
+
+生成时间: $(date)
+EOF
+        
+        log_success "加入命令已保存到 join-command.txt"
     fi
 }
 
@@ -346,13 +410,15 @@ main() {
             start_service
             health_check
             show_status
+            show_join_info
             
             echo "🎉 GPT-Load 主节点部署完成！"
             echo ""
             echo "📖 下一步:"
             echo "  1. 访问 http://localhost:3001"
-            echo "  2. 在其他服务器上运行: ./join-cluster.sh <主节点IP>"
-            echo "  3. 查看帮助: $0 help"
+            echo "  2. 复制上面的加入命令到子节点执行"
+            echo "  3. 或者运行: ./generate-join-command.sh"
+            echo "  4. 查看帮助: $0 help"
             echo ""
             ;;
     esac
