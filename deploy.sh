@@ -330,6 +330,30 @@ show_join_info() {
         echo "  - 端口: 3001"
         echo ""
         
+        # IP类型说明
+        if [[ "${MASTER_IP}" =~ ^10\. ]] || [[ "${MASTER_IP}" =~ ^192\.168\. ]] || [[ "${MASTER_IP}" =~ ^172\.(1[6-9]|2[0-9]|3[01])\. ]]; then
+            echo "🌐 IP类型说明："
+            echo "  - 当前为内网IP: 适用于同一局域网内部部署"
+            echo "  - 子节点必须在同一网络中才能访问"
+            echo ""
+        elif [[ "${MASTER_IP}" == *"请手动指定IP"* ]]; then
+            echo "⚠️  IP地址检测失败："
+            echo "  - 请运行 ./ip-detector.sh --fix 手动选择IP"
+            echo "  - 或使用 ./generate-join-command.sh --master-ip <IP> 指定IP"
+            echo ""
+        else
+            echo "🌐 IP类型说明："
+            echo "  - 当前为公网IP: 适用于互联网部署"
+            echo "  - 需要配置端口转发和防火墙规则"
+            echo ""
+        fi
+        
+        echo "🔧 如果遇到问题："
+        echo "  - IP地址不正确: 运行 ./ip-detector.sh --fix 手动修正"
+        echo "  - 连接失败: 检查防火墙设置，开放3001端口"
+        echo "  - 需要帮助: 运行 ./ip-detector.sh --issues 查看常见问题"
+        echo ""
+        
         # 保存到文件
         cat > join-command.txt << EOF
 GPT-Load 子节点加入命令
@@ -353,32 +377,43 @@ EOF
 get_master_ip_auto() {
     local master_ip=""
     
-    # 1. 首先尝试获取内网IP（更适合局域网部署）
-    if command -v ip &> /dev/null; then
-        # 获取默认路由的IP
-        master_ip=$(ip route get 1.1.1.1 | awk '{print $7}' | head -1 2>/dev/null || echo "")
+    # 使用新的IP检测工具
+    if [ -f ip-detector.sh ]; then
+        master_ip=$(./ip-detector.sh --auto 2>/dev/null || echo "")
     fi
     
-    # 2. 如果没有获取到，尝试其他方法
-    if [ -z "$master_ip" ] && command -v hostname &> /dev/null; then
-        master_ip=$(hostname -I | awk '{print $1}' 2>/dev/null || echo "")
-    fi
-    
-    # 3. 如果还是没有，尝试ifconfig
-    if [ -z "$master_ip" ] && command -v ifconfig &> /dev/null; then
-        master_ip=$(ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -1 2>/dev/null || echo "")
-    fi
-    
-    # 4. 如果还是没有，获取外网IP（用于公网部署）
-    if [ -z "$master_ip" ] && command -v curl &> /dev/null; then
-        master_ip=$(curl -s --connect-timeout 5 ifconfig.me 2>/dev/null || echo "")
-    fi
-    
-    # 5. 最后检查是否为有效的IP地址
-    if [ -z "$master_ip" ] || [ "$master_ip" = "localhost" ] || [ "$master_ip" = "127.0.0.1" ]; then
-        log_warning "无法自动检测到有效的IP地址，请手动指定"
-        log_info "使用方法: ./generate-join-command.sh --master-ip <你的IP地址>"
-        master_ip="<你的主节点IP>"
+    # 如果IP检测工具失败，使用备用方法
+    if [ -z "$master_ip" ] || [ "$master_ip" = "<你的主节点IP>" ]; then
+        # 1. 首先尝试获取内网IP（更适合局域网部署）
+        if command -v ip &> /dev/null; then
+            # 获取默认路由的IP
+            master_ip=$(ip route get 1.1.1.1 | awk '{print $7}' | head -1 2>/dev/null || echo "")
+        fi
+        
+        # 2. 如果没有获取到，尝试其他方法
+        if [ -z "$master_ip" ] && command -v hostname &> /dev/null; then
+            master_ip=$(hostname -I | awk '{print $1}' 2>/dev/null || echo "")
+        fi
+        
+        # 3. 如果还是没有，尝试ifconfig
+        if [ -z "$master_ip" ] && command -v ifconfig &> /dev/null; then
+            master_ip=$(ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -1 2>/dev/null || echo "")
+        fi
+        
+        # 4. 如果还是没有，获取外网IP（用于公网部署）
+        if [ -z "$master_ip" ] && command -v curl &> /dev/null; then
+            master_ip=$(curl -s --connect-timeout 5 ifconfig.me 2>/dev/null || echo "")
+        fi
+        
+        # 5. 最后检查是否为有效的IP地址
+        if [ -z "$master_ip" ] || [ "$master_ip" = "localhost" ] || [ "$master_ip" = "127.0.0.1" ]; then
+            log_warning "无法自动检测到有效的IP地址"
+            log_info "💡 解决方案："
+            log_info "   1. 运行 ./ip-detector.sh --list 查看所有IP"
+            log_info "   2. 运行 ./ip-detector.sh --fix 手动选择IP"
+            log_info "   3. 使用 ./generate-join-command.sh --master-ip <IP> 指定IP"
+            master_ip="<请手动指定IP>"
+        fi
     fi
     
     echo "$master_ip"
